@@ -85,6 +85,18 @@ typedef struct trx_log_entry_s {
 
 trx_log_header _log_header;
 
+TransactionError convert_eeprom_error(int rc)
+{
+	switch(rc) {
+	case EEPROM_RC_SUCCESS:
+		return TRN_RC_SUCCESS;
+	case EEPROM_RC_FAILURE:
+		return TRN_RC_FAILURE;
+	default:
+	case EEPROM_RC_SYSFAIL:
+		return TRN_RC_SYSFAIL;
+	}
+}
 
 /*
  * Fail safe function for updating header
@@ -95,14 +107,14 @@ TransactionError update_log_header()
 	_log_header.crc8 = compute_crc8((unsigned char*)&_log_header, sizeof(_log_header) - 1);
 	/* 1. Update primary header, secondary header is in consistent state */
 	rc = eeprom_write(EEPROM_LOG_HEADER_PRIMARY, &_log_header, sizeof(_log_header));
-	if(rc != EEPROM_RC_SUCESS)
+	if(rc != EEPROM_RC_SUCCESS)
 	{
 		return TRN_RC_SYSFAIL;
 	}
 
 	/* 2. Primary header is in consistent state, secondary header is to be updated */
 	rc = eeprom_write(EEPROM_LOG_HEADER_SECONDARY, &_log_header, sizeof(_log_header));
-	if(rc != EEPROM_RC_SUCESS)
+	if(rc != EEPROM_RC_SUCCESS)
 	{
 		return TRN_RC_SYSFAIL;
 	}
@@ -116,9 +128,9 @@ TransactionError retrive_log_header()
 {
 	int rc = 0;
 	rc = eeprom_read(EEPROM_LOG_HEADER_PRIMARY, &_log_header, sizeof(_log_header));
-	if(rc != EEPROM_RC_SUCESS)
+	if(rc != EEPROM_RC_SUCCESS)
 	{
-		return TRN_RC_SYSFAIL;
+		return convert_eeprom_error(rc);
 	}
 
 	unsigned int crc8 = compute_crc8((unsigned char*)&_log_header, sizeof(_log_header) - 1);
@@ -126,9 +138,9 @@ TransactionError retrive_log_header()
 	{
 		/* Primary header is not ok */
 		rc = eeprom_read(EEPROM_LOG_HEADER_SECONDARY, &_log_header, sizeof(_log_header) - 1);
-		if(rc != EEPROM_RC_SUCESS)
+		if(rc != EEPROM_RC_SUCCESS)
 		{
-			return TRN_RC_SYSFAIL;
+			return convert_eeprom_error(rc);
 		}
 
 		crc8 = compute_crc8((unsigned char*)&_log_header, sizeof(_log_header));
@@ -198,12 +210,13 @@ TransactionError TrnBegin()
 TransactionError TrnWrite(void * destinationAddress, void * data, int size)
 {
 	int rc = 0;
-	unsigned long offset = destinationAddress;
+	unsigned long offset = (unsigned long)destinationAddress;
 	trx_log_entry new_entry;
 
 	if((offset + size) > EEPROM_DATA_SIZE)
 	{
 		/* writing over boundaries */
+		return TRN_RC_FAILURE;
 	}
 
 	new_entry.offset = offset;
@@ -213,11 +226,13 @@ TransactionError TrnWrite(void * destinationAddress, void * data, int size)
 	if(size > EEPROM_WRITE_LIMIT)
 	{
 		/* Size of operation is over permitted limit */
+		return TRN_RC_FAILURE;
 	}
 
 	if((size + offset + sizeof(new_entry)) > (EEPROM_LOG_SIZE - _log_header.log_entry_offset_tail))
 	{
 		/* Transaction log is full */
+		return TRN_RC_FAILURE;
 	}
 
 	rc = eeprom_write(_log_header.log_entry_offset_tail, &new_entry, sizeof(new_entry));
@@ -245,6 +260,10 @@ TransactionError TrnCommit(void)
 	{
 		_log_header.state = TRX_STATE_COMMITING;
 		rc = update_log_header();
+		if(rc != TRN_RC_SUCCESS)
+		{
+			return rc;
+		}
 	}
 
 	while(_log_header.log_entry_offset_head != _log_header.log_entry_offset_tail)
@@ -262,19 +281,36 @@ TransactionError TrnCommit(void)
 			_log_header.flags |= EEPROM_ENTRY_BACKUP;
 
 			rc = update_log_header();
+			if(rc != TRN_RC_SUCCESS)
+			{
+				return rc;
+			}
 		}
 
 		/* Reading data address of data area */
 		rc = eeprom_read(_log_header.log_entry_offset_head + sizeof(*log_entry), log_entry->data, log_entry->size);
+		if(rc != EEPROM_RC_SUCCESS)
+		{
+			return convert_eeprom_error(rc);
+		}
+
 
 		/* 3. serialize an entry */
 		rc = eeprom_write(EEPROM_DATA_OFFSET + log_entry->offset, log_entry->data, log_entry->size);
+		if(rc != EEPROM_RC_SUCCESS)
+		{
+			return convert_eeprom_error(rc);
+		}
 
 		/* 4. update header */
 		_log_header.flags &= (~EEPROM_ENTRY_BACKUP);
 		_log_header.log_entry_offset_head += sizeof(trx_log_entry) + log_entry->size;
 
 		rc = update_log_header();
+		if(rc != TRN_RC_SUCCESS)
+		{
+			return rc;
+		}
 
 	}
 	_log_header.state = TRX_STATE_CLOSED;
@@ -288,15 +324,18 @@ TransactionError TrnCommit(void)
 TransactionError TrnDirectRead(void * destinationAddress, void * data, int size)
 {
 	int rc = 0;
-	unsigned long offset = destinationAddress;
-	trx_log_entry new_entry;
+	unsigned long offset = (unsigned long)destinationAddress;
 
 	if((offset + size) > EEPROM_DATA_SIZE)
 	{
 		/* reading over boundaries */
+		return TRN_RC_SUCCESS;
 	}
 	rc = eeprom_read(EEPROM_DATA_OFFSET + offset, data, size);
-	/* TODO convert return code */
+	if(rc != EEPROM_RC_SUCCESS)
+	{
+		return convert_eeprom_error(rc);
+	}
 	return rc;
 }
 

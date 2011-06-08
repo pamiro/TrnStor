@@ -57,7 +57,7 @@ int eeprom_open()
 		return EEPROM_RC_SYSFAIL;
 	}
 
-	return EEPROM_RC_SUCESS;
+	return EEPROM_RC_SUCCESS;
 }
 
 int eeprom_read(unsigned long offset, void* data, unsigned long size)
@@ -83,7 +83,7 @@ int eeprom_read(unsigned long offset, void* data, unsigned long size)
 		fprintf(stderr, "file (%s) writing error : %s\n", eeprom_filename, strerror(errno));
 		return EEPROM_RC_SYSFAIL;
 	}
-	return EEPROM_RC_SUCESS;
+	return EEPROM_RC_SUCCESS;
 }
 
 int eeprom_write(unsigned long offset, void* data, unsigned long size)
@@ -111,7 +111,7 @@ int eeprom_write(unsigned long offset, void* data, unsigned long size)
 
 	fsync(eeprom_fd);
 
-	return EEPROM_RC_SUCESS;
+	return EEPROM_RC_SUCCESS;
 }
 
 int eeprom_close()
@@ -124,6 +124,6 @@ int eeprom_close()
 		fprintf(stderr, "file (%s) open error : %s\n", eeprom_filename, strerror(errno));
 		return EEPROM_RC_FAILURE;
 	}
-	return EEPROM_RC_SUCESS;
+	return EEPROM_RC_SUCCESS;
 }
 

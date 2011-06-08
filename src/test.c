@@ -14,7 +14,7 @@
 int main(int argc, char* argv[])
 {
 	int rc = 0;
-	if(eeprom_open() == EEPROM_RC_SUCESS)
+	if(eeprom_open() == EEPROM_RC_SUCCESS)
 	{
 		TrnFormat();
 		while(1)
