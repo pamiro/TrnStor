@@ -11,7 +11,7 @@
 #include <string.h>
 
 #include "crc8.h"
-#include "robustflash.h"
+#include "trnstor.h"
 
 const char * TrnRCToString(TransactionError err)
 {
